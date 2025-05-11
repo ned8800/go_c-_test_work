@@ -1,3 +1,3 @@
 server:
   grpc_address: ":8080"
-  client_adress: ":8082"
+  client_subject: "abracadabra"

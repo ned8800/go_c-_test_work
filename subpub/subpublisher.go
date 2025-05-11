@@ -14,82 +14,38 @@ type SubPubImpl struct {
 	shutdown    chan struct{}
 }
 
-// func (sp *SubPubImpl) Subscribe(subject string, cb MessageHandler) (Subscription, error) {
-// 	sp.mu.Lock()
-// 	defer sp.mu.Unlock()
-
-// 	select {
-// 	case <-sp.shutdown:
-// 		return nil, ErrSubPubClosed
-// 	default:
-// 		break
-// 	}
-
-// 	newSubscriprion := subImpl{
-// 		cb:    cb,
-// 		msgCh: make(chan interface{}, defaultMessagesBufferSize),
-// 	}
-
-// 	sp.subscribers[subject] = append(sp.subscribers[subject], &newSubscriprion)
-
-// 	sp.wg.Add(1)
-// 	go func(subscription *subImpl, subject string) {
-// 		defer sp.wg.Done()
-
-// 		for msg := range subscription.msgCh {
-// 			subscription.cb(msg)
-// 		}
-// 	}(&newSubscriprion, subject)
-
-// 	return &SubscriptionImpl{
-// 		sp:      sp,
-// 		subject: subject,
-// 		sub:     &newSubscriprion,
-// 	}, nil
-// }
-
-// Subscribe creates an asynchronous queue subscriber on the given subject.
 func (sp *SubPubImpl) Subscribe(subject string, cb MessageHandler) (Subscription, error) {
-	// Check if system is shutting down before acquiring lock
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
 	select {
 	case <-sp.shutdown:
 		return nil, ErrSubPubClosed
 	default:
+		break
 	}
 
-	s := &subImpl{
+	newSubscriprion := subImpl{
 		cb:    cb,
 		msgCh: make(chan interface{}, defaultMessagesBufferSize),
 	}
 
-	sp.mu.Lock()
-	// Double check after acquiring lock to handle race condition
-	select {
-	case <-sp.shutdown:
-		sp.mu.Unlock()
-		return nil, ErrSubPubClosed
-	default:
-	}
-	sp.subscribers[subject] = append(sp.subscribers[subject], s)
-	sp.mu.Unlock()
+	sp.subscribers[subject] = append(sp.subscribers[subject], &newSubscriprion)
 
 	sp.wg.Add(1)
-	go func(sub *subImpl, subSubject string) { // Pass sub and subject to avoid closure capturing issues
+	go func(subscription *subImpl, subject string) {
 		defer sp.wg.Done()
-		// defer func() {
-		// 	if r := recover(); r != nil {
-		// 		// Log panics from MessageHandler to prevent subscriber goroutine death from affecting others.
-		// 		// This specific subscriber will stop processing.
-		// 		log.Printf("subpub: MessageHandler panicked for subject '%s': %v\nStack: %s", subSubject, r, string(debug.Stack()))
-		// 	}
-		// }()
 
-		for msg := range sub.msgCh { // Loop terminates when sub.msgCh is closed
-			sub.cb(msg)
+		for msg := range subscription.msgCh {
+			subscription.cb(msg)
 		}
-	}(s, subject)
+	}(&newSubscriprion, subject)
 
-	return &SubscriptionImpl{sp: sp, subject: subject, sub: s}, nil
+	return &SubscriptionImpl{
+		sp:      sp,
+		subject: subject,
+		sub:     &newSubscriprion,
+	}, nil
 }
 
 func (sp *SubPubImpl) Publish(subject string, msg interface{}) error {

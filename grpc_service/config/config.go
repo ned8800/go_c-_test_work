@@ -12,8 +12,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	GRPCAddress       string `mapstructure:"grpc_address"`
-	ClientGRPCAddress string `mapstructure:"client_adress"`
+	GRPCAddress   string `mapstructure:"grpc_address"`
+	ClientSubject string `mapstructure:"client_subject"`
 }
 
 func LoadConfig(path string) (*Config, error) {

@@ -30,8 +30,8 @@ func main() {
 	brokerServiceAddress := cfg.Server.GRPCAddress
 
 	if brokerServiceAddress == "" {
-		brokerServiceAddress = "localhost:8081"
-		log.Printf("broker client: broker_internal_address not in config, using default %s", brokerServiceAddress)
+		brokerServiceAddress = "localhost:8080"
+		log.Info().Msg("broker client: main broker adress not in config, using default: localhost:8080")
 	}
 
 	// connection
@@ -51,7 +51,7 @@ func main() {
 		}
 	}()
 
-	logKey := "abracadabra"
+	logKey := cfg.Server.ClientSubject
 	brokerClient := pb.NewPubSubClient(conn)
 	logReq := &pb.SubscribeRequest{Key: logKey}
 
@@ -60,7 +60,7 @@ func main() {
 	if err != nil {
 		syslog.Fatalf("error couldnt connect to grpc: %v", err)
 	}
-	log.Info().Msgf("main broker: Subscribed to broker for key '%s'. Listening for events...", logKey)
+	log.Info().Msgf("broker client: Subscribed to main broker for key '%s'. Listening for events...", logKey)
 
 	// Listen for events
 	go func(strCl *pb.PubSub_SubscribeClient) {
@@ -68,15 +68,15 @@ func main() {
 			event, err := (*strCl).Recv()
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					log.Info().Msgf("main broker: Broker stream for key '%s' ended (EOF). Exiting.", logKey)
+					log.Info().Msgf("broker client: main broker stream for key '%s' ended (EOF). Exiting.", logKey)
 				} else if status.Code(err) == codes.Canceled {
-					log.Info().Msgf("main broker: Broker stream for key '%s' canceled. Exiting.", logKey)
+					log.Info().Msgf("broker client: main broker stream for key '%s' canceled. Exiting.", logKey)
 				} else {
-					log.Info().Msgf("main broker: Error receiving from broker stream for key '%s': %v. Exiting.", logKey, err)
+					log.Info().Msgf("broker client: error receiving from main broker stream for key '%s': %v. Exiting.", logKey, err)
 				}
-				break
+				return
 			}
-			log.Info().Msgf("main broker: [BROKER EVENT via main] Key: %s, Data: %s", logKey, event.GetData())
+			log.Info().Msgf("broker client: main broker stream: Subject: %s, Data: %s", logKey, event.GetData())
 		}
 	}(&streamClient)
 

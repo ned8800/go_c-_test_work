@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// BrokerPubSubImpl implements the pb.PubSubServiceServer for the core broker.
 type BrokerPubSubImpl struct {
 	pb.UnimplementedPubSubServer
 	bus subpub.SubPub
@@ -31,14 +30,14 @@ func (s *BrokerPubSubImpl) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_
 	}
 	subscribeKey := req.GetKey()
 
-	log.Info().Msgf("main broker: Client (external_svc) subscribed to key: %s", subscribeKey)
+	log.Info().Msgf("main broker: client subscribed to key: %s", subscribeKey)
 
 	msgChan := make(chan interface{}, 64)
 
 	handler := func(msg interface{}) {
 		data, ok := msg.(string)
 		if !ok {
-			log.Error().Msgf("main broker: Bus sent non-string message for key %s: %T", subscribeKey, msg)
+			log.Error().Msgf("main broker: bus sent non-string message for key %s: %T", subscribeKey, msg)
 			return
 		}
 		select {
@@ -50,26 +49,26 @@ func (s *BrokerPubSubImpl) Subscribe(req *pb.SubscribeRequest, stream pb.PubSub_
 
 	subscription, err := s.bus.Subscribe(subscribeKey, handler)
 	if err != nil {
-		log.Info().Msgf("main broker: Failed to subscribe to local bus for key %s: %v", subscribeKey, err)
+		log.Info().Msgf("main broker: failed to subscribe to local bus for key %s: %v", subscribeKey, err)
 		if errors.Is(err, subpub.ErrSubPubClosed) {
 			return status.Errorf(codes.Unavailable, "broker: service is shutting down")
 		}
 		return status.Errorf(codes.Internal, "broker: failed to subscribe to local bus: %v", err)
 	}
 	defer subscription.Unsubscribe()
-	log.Info().Msgf("main broker: Successfully subscribed to local bus for key: %s", subscribeKey)
+	log.Info().Msgf("main broker: client successfully subscribed to local bus for key: %s", subscribeKey)
 
 	ctx := stream.Context()
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info().Msgf("main broker: Subscriber stream for key %s ended. Error: %v", subscribeKey, ctx.Err())
+			log.Info().Msgf("main broker: client subscriber stream for key %s ended. Error: %v", subscribeKey, ctx.Err())
 			return nil
 		case busMsg := <-msgChan:
 			data, _ := busMsg.(string)
 			event := &pb.Event{Data: data}
 			if err := stream.Send(event); err != nil {
-				log.Info().Msgf("main broker: Error sending event for key %s: %v", subscribeKey, err)
+				log.Info().Msgf("main broker: error sending event for key %s: %v", subscribeKey, err)
 				if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled || status.Code(err) == codes.Unavailable {
 					return nil
 				}
